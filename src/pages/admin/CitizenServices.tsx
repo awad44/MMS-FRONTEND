@@ -3,6 +3,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 import {
   Table,
   TableBody,
@@ -18,15 +39,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Filter, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Search, Filter, Eye, CheckCircle, XCircle, FileText, Calendar, User } from 'lucide-react';
 import { mockRequests } from '@/lib/mockData';
-import { RequestStatus } from '@/types';
+import { RequestStatus, CitizenRequest, RequestType } from '@/types';
 
 export default function CitizenServices() {
+  const { toast } = useToast();
+  const [requests, setRequests] = useState(mockRequests);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all');
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<CitizenRequest | null>(null);
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [actionRequest, setActionRequest] = useState<CitizenRequest | null>(null);
+  
+  // New request form state
+  const [newRequest, setNewRequest] = useState({
+    citizenName: '',
+    type: '' as RequestType,
+    description: '',
+  });
 
-  const filteredRequests = mockRequests.filter(request => {
+  const filteredRequests = requests.filter(request => {
     const matchesSearch = 
       request.citizenName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -36,6 +72,90 @@ export default function CitizenServices() {
     
     return matchesSearch && matchesStatus;
   });
+
+  const handleViewRequest = (request: CitizenRequest) => {
+    setSelectedRequest(request);
+    setViewDialogOpen(true);
+  };
+
+  const handleApproveRequest = (request: CitizenRequest) => {
+    setActionRequest(request);
+    setApproveDialogOpen(true);
+  };
+
+  const handleRejectRequest = (request: CitizenRequest) => {
+    setActionRequest(request);
+    setRejectDialogOpen(true);
+  };
+
+  const confirmApprove = () => {
+    if (!actionRequest) return;
+    
+    setRequests(prev => prev.map(req => 
+      req.id === actionRequest.id 
+        ? { ...req, status: 'approved' as RequestStatus, lastUpdated: new Date().toISOString() }
+        : req
+    ));
+    
+    toast({
+      title: "Request Approved",
+      description: `Request ${actionRequest.id} has been approved successfully.`,
+    });
+    
+    setApproveDialogOpen(false);
+    setActionRequest(null);
+  };
+
+  const confirmReject = () => {
+    if (!actionRequest) return;
+    
+    setRequests(prev => prev.map(req => 
+      req.id === actionRequest.id 
+        ? { ...req, status: 'rejected' as RequestStatus, lastUpdated: new Date().toISOString() }
+        : req
+    ));
+    
+    toast({
+      title: "Request Rejected",
+      description: `Request ${actionRequest.id} has been rejected.`,
+      variant: "destructive",
+    });
+    
+    setRejectDialogOpen(false);
+    setActionRequest(null);
+  };
+
+  const handleCreateRequest = () => {
+    if (!newRequest.citizenName || !newRequest.type || !newRequest.description) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const request: CitizenRequest = {
+      id: `REQ${String(requests.length + 1).padStart(3, '0')}`,
+      citizenId: `CIT${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
+      citizenName: newRequest.citizenName,
+      type: newRequest.type,
+      status: 'pending',
+      submittedDate: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      description: newRequest.description,
+    };
+
+    setRequests(prev => [request, ...prev]);
+    
+    toast({
+      title: "Request Created",
+      description: `New request ${request.id} has been created successfully.`,
+    });
+
+    setNewRequest({ citizenName: '', type: '' as RequestType, description: '' });
+    setCreateDialogOpen(false);
+  };
 
   const getStatusBadge = (status: RequestStatus) => {
     switch (status) {
@@ -93,7 +213,7 @@ export default function CitizenServices() {
               <CardTitle>All Requests</CardTitle>
               <CardDescription>View and manage citizen service requests</CardDescription>
             </div>
-            <Button>Create New Request</Button>
+            <Button onClick={() => setCreateDialogOpen(true)}>Create New Request</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -145,15 +265,29 @@ export default function CitizenServices() {
                     <TableCell>{new Date(request.submittedDate).toLocaleDateString()}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="icon">
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => handleViewRequest(request)}
+                        >
                           <Eye className="h-4 w-4" />
                         </Button>
                         {request.status === 'pending' && (
                           <>
-                            <Button variant="ghost" size="icon" className="text-success">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-success hover:text-success hover:bg-success/10"
+                              onClick={() => handleApproveRequest(request)}
+                            >
                               <CheckCircle className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="text-destructive">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => handleRejectRequest(request)}
+                            >
                               <XCircle className="h-4 w-4" />
                             </Button>
                           </>
@@ -167,6 +301,173 @@ export default function CitizenServices() {
           </div>
         </CardContent>
       </Card>
+
+      {/* View Request Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Request Details</DialogTitle>
+            <DialogDescription>
+              Full information about request {selectedRequest?.id}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRequest && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Request ID</Label>
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{selectedRequest.id}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Status</Label>
+                  <div>{getStatusBadge(selectedRequest.status)}</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Citizen Name</Label>
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{selectedRequest.citizenName}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Request Type</Label>
+                <div className="font-medium capitalize">{selectedRequest.type.replace('_', ' ')}</div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Description</Label>
+                <div className="text-sm">{selectedRequest.description}</div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Submitted Date</Label>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{new Date(selectedRequest.submittedDate).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Last Updated</Label>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{new Date(selectedRequest.lastUpdated).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {selectedRequest.assignedTo && (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Assigned To</Label>
+                  <div className="font-medium">{selectedRequest.assignedTo}</div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Request Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>Create New Request</DialogTitle>
+            <DialogDescription>
+              Submit a new citizen service request
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="citizenName">Citizen Name *</Label>
+              <Input
+                id="citizenName"
+                value={newRequest.citizenName}
+                onChange={(e) => setNewRequest(prev => ({ ...prev, citizenName: e.target.value }))}
+                placeholder="Enter citizen name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="type">Request Type *</Label>
+              <Select
+                value={newRequest.type}
+                onValueChange={(value: RequestType) => setNewRequest(prev => ({ ...prev, type: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select request type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="residency">Residency Certificate</SelectItem>
+                  <SelectItem value="birth">Birth Certificate</SelectItem>
+                  <SelectItem value="death">Death Certificate</SelectItem>
+                  <SelectItem value="marriage">Marriage Certificate</SelectItem>
+                  <SelectItem value="garbage">Garbage Collection</SelectItem>
+                  <SelectItem value="street_repair">Street Repair</SelectItem>
+                  <SelectItem value="complaint">Public Complaint</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description *</Label>
+              <Textarea
+                id="description"
+                value={newRequest.description}
+                onChange={(e) => setNewRequest(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Provide details about the request..."
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateRequest}>Create Request</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approve Confirmation Dialog */}
+      <AlertDialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve Request</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to approve request {actionRequest?.id} for {actionRequest?.citizenName}?
+              This action will update the request status to approved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmApprove}>Approve</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reject Confirmation Dialog */}
+      <AlertDialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject Request</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reject request {actionRequest?.id} for {actionRequest?.citizenName}?
+              This action will update the request status to rejected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmReject} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Reject
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
